@@ -1,15 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { orderSchema, calculateTotal, packageOptions, bundleOptions, CUSTOM_LYRICS_PRICE } from '@/lib/order-schema';
-import { createOrder } from '@/lib/supabase';
 
-// Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-});
+// Lazy Stripe initialization to prevent build-time errors
+function getStripe(): Stripe | null {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  return new Stripe(key, {
+    apiVersion: '2025-02-24.acacia',
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const stripe = getStripe();
+    if (!stripe) {
+      return NextResponse.json(
+        { error: 'Payment system not configured' },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
 
     // Validate the order data
@@ -201,42 +212,47 @@ export async function POST(request: NextRequest) {
     });
 
     // ============================================
-    // STORE ORDER IN DATABASE
+    // STORE ORDER IN DATABASE (dynamic import to avoid build-time errors)
     // ============================================
-    try {
-      const basePrice = selectedPackage?.price || 79;
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        const { createOrder } = await import('@/lib/supabase');
+        const basePrice = selectedPackage?.price || 79;
 
-      await createOrder({
-        order_number: orderId,
-        status: 'pending',
-        customer_email: orderData.customerEmail,
-        customer_name: orderData.customerName,
-        recipient_name: orderData.recipientName,
-        occasion: orderData.occasion,
-        relationship: orderData.relationship,
-        story: orderData.story,
-        genre: orderData.genre,
-        mood: orderData.mood,
-        allow_english: orderData.allowEnglish,
-        package_type: orderData.packageType,
-        selected_bundle: orderData.selectedBundle,
-        bump_karaoke: orderData.bumpKaraoke,
-        bump_rush: orderData.bumpRush,
-        bump_gift: orderData.bumpGift,
-        has_custom_lyrics: orderData.hasCustomLyrics,
-        custom_lyrics: orderData.customLyrics || null,
-        base_price: basePrice,
-        total_price: total,
-        stripe_session_id: session.id,
-        stripe_payment_intent_id: null,
-        delivery_url: null,
-        delivered_at: null,
-      });
+        await createOrder({
+          order_number: orderId,
+          status: 'pending',
+          customer_email: orderData.customerEmail,
+          customer_name: orderData.customerName,
+          recipient_name: orderData.recipientName,
+          occasion: orderData.occasion,
+          relationship: orderData.relationship,
+          story: orderData.story,
+          genre: orderData.genre,
+          mood: orderData.mood,
+          allow_english: orderData.allowEnglish,
+          package_type: orderData.packageType,
+          selected_bundle: orderData.selectedBundle,
+          bump_karaoke: orderData.bumpKaraoke,
+          bump_rush: orderData.bumpRush,
+          bump_gift: orderData.bumpGift,
+          has_custom_lyrics: orderData.hasCustomLyrics,
+          custom_lyrics: orderData.customLyrics || null,
+          base_price: basePrice,
+          total_price: total,
+          stripe_session_id: session.id,
+          stripe_payment_intent_id: null,
+          delivery_url: null,
+          delivered_at: null,
+        });
 
-      console.log('Order stored in database:', orderId);
-    } catch (dbError) {
-      // Log but don't fail - order will be created from webhook if this fails
-      console.error('Failed to store order in database:', dbError);
+        console.log('Order stored in database:', orderId);
+      } catch (dbError) {
+        // Log but don't fail - order will be created from webhook if this fails
+        console.error('Failed to store order in database:', dbError);
+      }
+    } else {
+      console.log('Supabase not configured, skipping database storage');
     }
 
     return NextResponse.json({

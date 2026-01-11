@@ -1,20 +1,32 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Supabase client for server-side operations
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Lazy initialization to prevent build-time errors when env vars aren't set
+let _supabaseAdmin: SupabaseClient | null = null;
+
+function getSupabaseUrl(): string {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL is not set');
+  }
+  return url;
+}
 
 // Server-side client with service role (for admin operations)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
-
-// Client-side client with anon key (for public operations)
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+function getSupabaseAdmin(): SupabaseClient {
+  if (!_supabaseAdmin) {
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!serviceKey) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
+    }
+    _supabaseAdmin = createClient(getSupabaseUrl(), serviceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  }
+  return _supabaseAdmin;
+}
 
 // ============================================
 // DATABASE TYPES
@@ -109,7 +121,7 @@ export interface OccasionReminder {
 // ============================================
 
 export async function createOrder(orderData: Omit<Order, 'id' | 'created_at' | 'updated_at'>): Promise<Order | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('orders')
     .insert(orderData)
     .select()
@@ -134,7 +146,7 @@ export async function updateOrderStatus(
     ...additionalData,
   };
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('orders')
     .update(updateData)
     .eq('order_number', orderNumber)
@@ -150,7 +162,7 @@ export async function updateOrderStatus(
 }
 
 export async function getOrderByNumber(orderNumber: string): Promise<Order | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('orders')
     .select('*')
     .eq('order_number', orderNumber)
@@ -165,7 +177,7 @@ export async function getOrderByNumber(orderNumber: string): Promise<Order | nul
 }
 
 export async function getOrderByStripeSession(sessionId: string): Promise<Order | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('orders')
     .select('*')
     .eq('stripe_session_id', sessionId)
@@ -184,7 +196,7 @@ export async function getOrderByStripeSession(sessionId: string): Promise<Order 
 // ============================================
 
 export async function addDeliverable(deliverable: Omit<Deliverable, 'id' | 'created_at'>): Promise<Deliverable | null> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('deliverables')
     .insert(deliverable)
     .select()
@@ -199,7 +211,7 @@ export async function addDeliverable(deliverable: Omit<Deliverable, 'id' | 'crea
 }
 
 export async function getDeliverablesByOrderId(orderId: string): Promise<Deliverable[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('deliverables')
     .select('*')
     .eq('order_id', orderId);
@@ -218,7 +230,7 @@ export async function getDeliverablesByOrderId(orderId: string): Promise<Deliver
 
 export async function getOrCreateCustomerLoyalty(email: string, name?: string): Promise<CustomerLoyalty | null> {
   // Check if customer exists
-  const { data: existing } = await supabaseAdmin
+  const { data: existing } = await getSupabaseAdmin()
     .from('customer_loyalty')
     .select('*')
     .eq('email', email)
@@ -229,7 +241,7 @@ export async function getOrCreateCustomerLoyalty(email: string, name?: string): 
   }
 
   // Create new customer
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('customer_loyalty')
     .insert({
       email,
@@ -278,7 +290,7 @@ export async function recordPurchase(
     updateData.vip_since = new Date().toISOString();
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('customer_loyalty')
     .update(updateData)
     .eq('email', email)
@@ -299,7 +311,7 @@ export async function recordPurchase(
 
 export async function getOrCreateReferralCode(email: string): Promise<string | null> {
   // Check if code exists
-  const { data: existing } = await supabaseAdmin
+  const { data: existing } = await getSupabaseAdmin()
     .from('referral_codes')
     .select('code')
     .eq('created_by_email', email)
@@ -312,7 +324,7 @@ export async function getOrCreateReferralCode(email: string): Promise<string | n
   // Generate new code
   const code = `FREUND-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-  const { error } = await supabaseAdmin
+  const { error } = await getSupabaseAdmin()
     .from('referral_codes')
     .insert({
       code,
@@ -331,7 +343,7 @@ export async function getOrCreateReferralCode(email: string): Promise<string | n
 }
 
 export async function validateReferralCode(code: string): Promise<{ isValid: boolean; referrerEmail?: string }> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('referral_codes')
     .select('*')
     .eq('code', code.toUpperCase())
@@ -358,7 +370,7 @@ export async function recordReferralUsage(
   const rewardAmount = 10; // 10 EUR reward for referrer
 
   // Record the usage
-  const { error: usageError } = await supabaseAdmin
+  const { error: usageError } = await getSupabaseAdmin()
     .from('referral_usages')
     .insert({
       referral_code: code.toUpperCase(),
@@ -373,17 +385,25 @@ export async function recordReferralUsage(
     return false;
   }
 
-  // Update referral code stats
-  const { error: updateError } = await supabaseAdmin
+  // Update referral code stats - first get current values, then increment
+  const { data: currentCode } = await getSupabaseAdmin()
     .from('referral_codes')
-    .update({
-      usage_count: supabaseAdmin.rpc('increment', { x: 1 }),
-      total_earned: supabaseAdmin.rpc('increment', { x: rewardAmount }),
-    })
-    .eq('code', code.toUpperCase());
+    .select('usage_count, total_earned')
+    .eq('code', code.toUpperCase())
+    .single();
 
-  if (updateError) {
-    console.error('Error updating referral code:', updateError);
+  if (currentCode) {
+    const { error: updateError } = await getSupabaseAdmin()
+      .from('referral_codes')
+      .update({
+        usage_count: (currentCode.usage_count || 0) + 1,
+        total_earned: (currentCode.total_earned || 0) + rewardAmount,
+      })
+      .eq('code', code.toUpperCase());
+
+    if (updateError) {
+      console.error('Error updating referral code:', updateError);
+    }
   }
 
   return true;
@@ -404,7 +424,7 @@ export async function createOccasionReminder(
   const reminderDate = new Date(occasionDateObj);
   reminderDate.setDate(reminderDate.getDate() - 14);
 
-  const { error } = await supabaseAdmin
+  const { error } = await getSupabaseAdmin()
     .from('occasion_reminders')
     .insert({
       customer_email: email,
@@ -426,7 +446,7 @@ export async function createOccasionReminder(
 export async function getDueReminders(): Promise<OccasionReminder[]> {
   const today = new Date().toISOString().split('T')[0];
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('occasion_reminders')
     .select('*')
     .eq('is_active', true)

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrderByNumber, getDeliverablesByOrderId } from '@/lib/supabase';
 
 // Status display mapping
 const statusLabels: Record<string, { label: string; description: string; progress: number }> = {
@@ -48,6 +47,17 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    // Check if Supabase is configured
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        { error: 'Database not configured' },
+        { status: 500 }
+      );
+    }
+
+    // Dynamic import to avoid build-time errors
+    const { getOrderByNumber, getDeliverablesByOrderId } = await import('@/lib/supabase');
 
     // Fetch order from database
     const order = await getOrderByNumber(orderId);

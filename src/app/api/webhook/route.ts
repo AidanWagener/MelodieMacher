@@ -1,26 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import {
-  createOrder,
-  updateOrderStatus,
-  getOrderByStripeSession,
-  recordPurchase,
-  getOrCreateReferralCode,
-} from '@/lib/supabase';
-import {
-  sendOrderConfirmationEmail,
-  sendSlackNotification,
-} from '@/lib/notifications';
 import { packageOptions } from '@/lib/order-schema';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-});
-
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+// Lazy Stripe initialization to prevent build-time errors
+function getStripe(): Stripe | null {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  return new Stripe(key, {
+    apiVersion: '2025-02-24.acacia',
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const stripe = getStripe();
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!stripe || !webhookSecret) {
+      return NextResponse.json(
+        { error: 'Webhook not configured' },
+        { status: 500 }
+      );
+    }
+
     const body = await request.text();
     const signature = request.headers.get('stripe-signature');
 
@@ -53,14 +55,9 @@ export async function POST(request: NextRequest) {
           orderId,
           recipientName,
           occasion,
-          relationship,
           genre,
-          mood,
           packageType,
           customerName,
-          allowEnglish,
-          hasCustomLyrics,
-          selectedBundle,
         } = session.metadata || {};
 
         console.log('=== ORDER COMPLETED ===');
@@ -88,72 +85,87 @@ export async function POST(request: NextRequest) {
           minute: '2-digit',
         });
 
-        // 1. Update order status in database to 'paid'
-        const existingOrder = await getOrderByStripeSession(session.id);
+        // Database operations (dynamic import to avoid build-time errors)
+        if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          try {
+            const {
+              updateOrderStatus,
+              getOrderByStripeSession,
+              recordPurchase,
+              getOrCreateReferralCode,
+            } = await import('@/lib/supabase');
 
-        if (existingOrder) {
-          // Order was created during checkout, update status
-          await updateOrderStatus(existingOrder.order_number, 'paid', {
-            stripe_payment_intent_id:
-              typeof session.payment_intent === 'string'
-                ? session.payment_intent
-                : session.payment_intent?.id,
-          });
-          console.log('Order status updated to paid:', existingOrder.order_number);
-        } else {
-          // Order wasn't pre-created, create it now (fallback)
-          console.log('Creating order from webhook (fallback)...');
-          // Note: Story and custom lyrics are not in metadata (too long)
-          // In production, these should be stored during checkout
+            // 1. Update order status in database to 'paid'
+            const existingOrder = await getOrderByStripeSession(session.id);
+
+            if (existingOrder) {
+              await updateOrderStatus(existingOrder.order_number, 'paid', {
+                stripe_payment_intent_id:
+                  typeof session.payment_intent === 'string'
+                    ? session.payment_intent
+                    : session.payment_intent?.id,
+              });
+              console.log('Order status updated to paid:', existingOrder.order_number);
+            } else {
+              console.log('Order not found in database, webhook received before checkout completed');
+            }
+
+            // 2. Record purchase for loyalty tracking
+            const { wasUpgraded } = await recordPurchase(
+              session.customer_email!,
+              (session.amount_total || 0) / 100,
+              customerName
+            );
+
+            if (wasUpgraded) {
+              console.log('Customer upgraded to VIP:', session.customer_email);
+            }
+
+            // 3. Generate referral code for customer
+            const referralCode = await getOrCreateReferralCode(session.customer_email!);
+            console.log('Referral code for customer:', referralCode);
+          } catch (dbError) {
+            console.error('Database operations failed:', dbError);
+          }
         }
 
-        // 2. Record purchase for loyalty tracking
-        const { customer, wasUpgraded } = await recordPurchase(
-          session.customer_email!,
-          (session.amount_total || 0) / 100,
-          customerName
-        );
-
-        if (wasUpgraded) {
-          console.log('Customer upgraded to VIP:', session.customer_email);
-          // Send VIP welcome email
+        // Email notifications (dynamic import)
+        if (process.env.RESEND_API_KEY) {
+          try {
+            const { sendOrderConfirmationEmail } = await import('@/lib/notifications');
+            await sendOrderConfirmationEmail({
+              to: session.customer_email!,
+              customerName: customerName || 'Kunde',
+              orderId: orderId!,
+              recipientName: recipientName || 'Empfaenger',
+              packageName: selectedPackage?.label || 'Melodie Plus',
+              deliveryTime: deliveryTimeStr,
+              total: (session.amount_total || 0) / 100,
+            });
+            console.log('Confirmation email sent');
+          } catch (emailError) {
+            console.error('Failed to send confirmation email:', emailError);
+          }
         }
 
-        // 3. Generate referral code for customer
-        const referralCode = await getOrCreateReferralCode(session.customer_email!);
-        console.log('Referral code for customer:', referralCode);
-
-        // 4. Send confirmation email
-        try {
-          await sendOrderConfirmationEmail({
-            to: session.customer_email!,
-            customerName: customerName || 'Kunde',
-            orderId: orderId!,
-            recipientName: recipientName || 'Empfaenger',
-            packageName: selectedPackage?.label || 'Melodie Plus',
-            deliveryTime: deliveryTimeStr,
-            total: (session.amount_total || 0) / 100,
-          });
-          console.log('Confirmation email sent');
-        } catch (emailError) {
-          console.error('Failed to send confirmation email:', emailError);
-        }
-
-        // 5. Send Slack notification to fulfillment team
-        try {
-          await sendSlackNotification({
-            orderId: orderId!,
-            customerName: customerName || 'Unknown',
-            customerEmail: session.customer_email!,
-            recipientName: recipientName || 'Unknown',
-            occasion: occasion || 'Unknown',
-            genre: genre || 'Unknown',
-            packageType: packageType || 'plus',
-            total: (session.amount_total || 0) / 100,
-          });
-          console.log('Slack notification sent');
-        } catch (slackError) {
-          console.error('Failed to send Slack notification:', slackError);
+        // Slack notification (dynamic import)
+        if (process.env.SLACK_WEBHOOK_URL) {
+          try {
+            const { sendSlackNotification } = await import('@/lib/notifications');
+            await sendSlackNotification({
+              orderId: orderId!,
+              customerName: customerName || 'Unknown',
+              customerEmail: session.customer_email!,
+              recipientName: recipientName || 'Unknown',
+              occasion: occasion || 'Unknown',
+              genre: genre || 'Unknown',
+              packageType: packageType || 'plus',
+              total: (session.amount_total || 0) / 100,
+            });
+            console.log('Slack notification sent');
+          } catch (slackError) {
+            console.error('Failed to send Slack notification:', slackError);
+          }
         }
 
         break;
@@ -162,21 +174,12 @@ export async function POST(request: NextRequest) {
       case 'payment_intent.payment_failed': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         console.error('Payment failed:', paymentIntent.id);
-
-        // Update order status to reflect failed payment
-        // In production: Send email to customer about failed payment
         break;
       }
 
       case 'charge.refunded': {
         const charge = event.data.object as Stripe.Charge;
         console.log('Refund processed:', charge.id);
-
-        // Find order by payment intent and update status
-        if (charge.payment_intent) {
-          // Update order status to 'refunded'
-          // In production: Send refund confirmation email
-        }
         break;
       }
 
