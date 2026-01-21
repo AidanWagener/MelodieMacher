@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { trackConversion, trackUpsellClick, hasAnalyticsConsent } from '@/lib/analytics';
+import { trackConversion, trackUpsellClick } from '@/lib/analytics';
 import { trackGA4Purchase } from '@/components/analytics/GoogleAnalytics';
-import { trackMetaPurchase } from '@/components/analytics/MetaPixel';
-import { getUTM, clearUTM } from '@/lib/utm';
+import { getUTM } from '@/lib/utm';
 
 interface ConversionData {
   orderId: string | null;
@@ -24,7 +23,7 @@ interface UseConversionTrackingOptions {
 /**
  * Hook for tracking conversions on the thank you page
  *
- * Fires purchase events to GA4 and Meta Pixel once per order.
+ * Fires purchase events to GA4 once per order.
  * Uses sessionStorage to prevent duplicate conversion tracking.
  */
 export function useConversionTracking(options?: UseConversionTrackingOptions) {
@@ -34,21 +33,13 @@ export function useConversionTracking(options?: UseConversionTrackingOptions) {
   const orderId = searchParams?.get('order') || null;
   const sessionId = searchParams?.get('session_id') || null;
 
-  // Track the conversion
   const trackPurchase = useCallback((data: ConversionData) => {
-    if (!hasAnalyticsConsent()) {
-      console.log('[Conversion] Skipping - no consent');
-      return;
-    }
-
-    // Check if we already tracked this order
     const trackedOrders = getTrackedOrders();
     if (data.orderId && trackedOrders.includes(data.orderId)) {
       console.log('[Conversion] Already tracked order:', data.orderId);
       return;
     }
 
-    // Track via unified analytics
     trackConversion({
       transactionId: data.orderId || data.sessionId || 'unknown',
       value: data.value,
@@ -63,7 +54,6 @@ export function useConversionTracking(options?: UseConversionTrackingOptions) {
       ],
     });
 
-    // Track via GA4 directly for enhanced e-commerce
     const items = [
       {
         item_id: data.packageType || 'song_package',
@@ -74,7 +64,6 @@ export function useConversionTracking(options?: UseConversionTrackingOptions) {
       },
     ];
 
-    // Add bumps as separate items
     if (data.bumps && data.bumps.length > 0) {
       data.bumps.forEach((bump) => {
         items.push({
@@ -94,28 +83,15 @@ export function useConversionTracking(options?: UseConversionTrackingOptions) {
       items,
     });
 
-    // Track via Meta Pixel directly
-    trackMetaPurchase({
-      value: data.value,
-      currency: data.currency || 'EUR',
-      contentIds: items.map((i) => i.item_id),
-      contentName: items.map((i) => i.item_name).join(', '),
-      numItems: items.length,
-      orderId: data.orderId || undefined,
-    });
-
-    // Mark as tracked
     if (data.orderId) {
       markOrderAsTracked(data.orderId);
     }
 
-    // Log UTM attribution
     const utm = getUTM();
     if (utm) {
       console.log('[Conversion] Attribution:', utm);
     }
 
-    // Callback
     options?.onConversionTracked?.(data);
 
     console.log('[Conversion] Tracked purchase:', {
@@ -125,20 +101,17 @@ export function useConversionTracking(options?: UseConversionTrackingOptions) {
     });
   }, [options]);
 
-  // Auto-track on mount if we have order data
   useEffect(() => {
     if (hasTrackedRef.current) return;
     if (!orderId && !sessionId) return;
 
-    // Fetch order details from the server if we have a session ID
-    // For now, we'll use URL params or default values
     const valueParam = searchParams?.get('value');
     const packageParam = searchParams?.get('package');
 
     const conversionData: ConversionData = {
       orderId,
       sessionId,
-      value: valueParam ? parseFloat(valueParam) : 79, // Default to Plus package
+      value: valueParam ? parseFloat(valueParam) : 79,
       packageType: packageParam || 'plus',
       packageName: getPackageName(packageParam || 'plus'),
     };
@@ -147,7 +120,6 @@ export function useConversionTracking(options?: UseConversionTrackingOptions) {
     trackPurchase(conversionData);
   }, [orderId, sessionId, searchParams, trackPurchase]);
 
-  // Track upsell clicks
   const trackUpsell = useCallback((upsellData: {
     upsellId: string;
     upsellName: string;
@@ -165,8 +137,6 @@ export function useConversionTracking(options?: UseConversionTrackingOptions) {
     hasTracked: hasTrackedRef.current,
   };
 }
-
-// Helper functions
 
 function getTrackedOrders(): string[] {
   if (typeof window === 'undefined') return [];
@@ -220,7 +190,6 @@ function getBumpPrice(bump: string): number {
 
 /**
  * Simple hook for manual conversion tracking
- * Use when you need more control over when conversions are tracked
  */
 export function useManualConversionTracking() {
   const trackPurchaseEvent = useCallback((data: {
@@ -234,11 +203,6 @@ export function useManualConversionTracking() {
       quantity?: number;
     }>;
   }) => {
-    if (!hasAnalyticsConsent()) {
-      console.log('[Conversion] Skipping - no consent');
-      return false;
-    }
-
     trackConversion({
       transactionId: data.transactionId,
       value: data.value,

@@ -20,9 +20,9 @@ import {
   Download,
   Share2,
 } from 'lucide-react';
-import { trackConversion, trackUpsellClick, hasAnalyticsConsent } from '@/lib/analytics';
+import { trackConversion, trackUpsellClick } from '@/lib/analytics';
 import { trackGA4Purchase } from '@/components/analytics/GoogleAnalytics';
-import { trackMetaPurchase } from '@/components/analytics/MetaPixel';
+import { trackMetaPurchase } from '@/lib/meta-events';
 import { getUTM, appendUTMToUrl } from '@/lib/utm';
 import { packageOptions } from '@/lib/order-schema';
 import { ReferralWidget } from '@/components/referral/ReferralWidget';
@@ -84,56 +84,52 @@ export function ThankYouContent() {
     const packageName = pkg?.label || 'Personalisierter Song';
 
     // Fire conversion events
-    if (hasAnalyticsConsent()) {
-      // Unified tracking
-      trackConversion({
-        transactionId: orderId || sessionId || 'unknown',
-        value: value,
-        currency: 'EUR',
-        items: [{
-          id: packageType,
-          name: packageName,
-          price: value,
-          quantity: 1,
-        }],
-      });
+    trackConversion({
+      transactionId: orderId || sessionId || 'unknown',
+      value: value,
+      currency: 'EUR',
+      items: [{
+        id: packageType,
+        name: packageName,
+        price: value,
+        quantity: 1,
+      }],
+    });
 
-      // GA4 Enhanced E-commerce
-      trackGA4Purchase({
-        transactionId: orderId || sessionId || 'unknown',
-        value: value,
-        currency: 'EUR',
-        items: [{
-          item_id: packageType,
-          item_name: packageName,
-          price: value,
-          quantity: 1,
-          item_category: 'personalized_song',
-        }],
-      });
+    // GA4 Enhanced E-commerce
+    trackGA4Purchase({
+      transactionId: orderId || sessionId || 'unknown',
+      value: value,
+      currency: 'EUR',
+      items: [{
+        item_id: packageType,
+        item_name: packageName,
+        price: value,
+        quantity: 1,
+        item_category: 'personalized_song',
+      }],
+    });
 
-      // Meta Pixel Purchase
-      trackMetaPurchase({
-        value: value,
-        currency: 'EUR',
-        contentIds: [packageType],
-        contentName: packageName,
-        numItems: 1,
-        orderId: orderId || undefined,
-      });
+    // Meta Pixel Purchase
+    trackMetaPurchase({
+      value: value,
+      orderId: orderId || undefined,
+      contentIds: [packageType],
+      contentName: packageName,
+      numItems: 1,
+    });
 
-      // Log UTM attribution
-      const utm = getUTM();
-      if (utm) {
-        console.log('[Conversion] Attribution:', utm);
-      }
-
-      console.log('[Conversion] Tracked purchase:', {
-        orderId,
-        value,
-        packageType,
-      });
+    // Log UTM attribution
+    const utm = getUTM();
+    if (utm) {
+      console.log('[Conversion] Attribution:', utm);
     }
+
+    console.log('[Conversion] Tracked purchase:', {
+      orderId,
+      value,
+      packageType,
+    });
 
     // Mark as tracked
     if (orderId) {

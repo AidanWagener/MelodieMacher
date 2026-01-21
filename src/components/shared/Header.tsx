@@ -32,10 +32,10 @@ export function Header() {
               So funktioniert&apos;s
             </Link>
             <Link
-              href="#beispiele"
+              href="/echte-geschichten"
               className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors"
             >
-              Beispiele
+              Echte Geschichten
             </Link>
             <Link
               href="#preise"
@@ -88,11 +88,11 @@ export function Header() {
               So funktioniert&apos;s
             </Link>
             <Link
-              href="#beispiele"
+              href="/echte-geschichten"
               className="text-sm font-medium text-gray-600 hover:text-primary-600 transition-colors py-2"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Beispiele
+              Echte Geschichten
             </Link>
             <Link
               href="#preise"

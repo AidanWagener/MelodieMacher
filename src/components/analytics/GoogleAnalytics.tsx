@@ -3,7 +3,6 @@
 import Script from 'next/script';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, Suspense } from 'react';
-import { hasAnalyticsConsent } from '@/lib/analytics';
 
 const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
 
@@ -11,7 +10,6 @@ const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
  * Google Analytics 4 Script Component
  *
  * Loads GA4 scripts and handles automatic page view tracking.
- * Only fires events after GDPR consent has been given.
  */
 
 function GoogleAnalyticsPageTracker() {
@@ -19,11 +17,10 @@ function GoogleAnalyticsPageTracker() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!GA_MEASUREMENT_ID || !hasAnalyticsConsent()) return;
+    if (!GA_MEASUREMENT_ID) return;
 
     const url = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : '');
 
-    // Track page view on route change
     if (typeof window !== 'undefined' && window.gtag) {
       window.gtag('config', GA_MEASUREMENT_ID, {
         page_path: url,
@@ -45,7 +42,6 @@ export function GoogleAnalytics() {
 
   return (
     <>
-      {/* Global Site Tag (gtag.js) - Google Analytics */}
       <Script
         strategy="afterInteractive"
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
@@ -58,25 +54,6 @@ export function GoogleAnalytics() {
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-
-            // Configure with consent mode defaults (required for GDPR)
-            gtag('consent', 'default', {
-              'analytics_storage': 'denied',
-              'ad_storage': 'denied',
-              'ad_user_data': 'denied',
-              'ad_personalization': 'denied',
-            });
-
-            // Check if consent already given
-            if (localStorage.getItem('analytics_consent') === 'true') {
-              gtag('consent', 'update', {
-                'analytics_storage': 'granted',
-                'ad_storage': 'granted',
-                'ad_user_data': 'granted',
-                'ad_personalization': 'granted',
-              });
-            }
-
             gtag('config', '${GA_MEASUREMENT_ID}', {
               page_path: window.location.pathname,
               send_page_view: true,
@@ -92,24 +69,7 @@ export function GoogleAnalytics() {
 }
 
 /**
- * Update GA4 consent status
- * Call this when user grants consent
- */
-export function updateGoogleAnalyticsConsent(consent: boolean): void {
-  if (typeof window === 'undefined' || !window.gtag) return;
-
-  // @ts-expect-error - consent is a valid gtag command
-  window.gtag('consent', 'update', {
-    analytics_storage: consent ? 'granted' : 'denied',
-    ad_storage: consent ? 'granted' : 'denied',
-    ad_user_data: consent ? 'granted' : 'denied',
-    ad_personalization: consent ? 'granted' : 'denied',
-  });
-}
-
-/**
  * Track E-commerce Purchase
- * Enhanced e-commerce tracking for GA4
  */
 export function trackGA4Purchase(data: {
   transactionId: string;
@@ -125,7 +85,7 @@ export function trackGA4Purchase(data: {
     item_variant?: string;
   }>;
 }): void {
-  if (typeof window === 'undefined' || !window.gtag || !hasAnalyticsConsent()) return;
+  if (typeof window === 'undefined' || !window.gtag) return;
 
   window.gtag('event', 'purchase', {
     transaction_id: data.transactionId,
@@ -157,7 +117,7 @@ export function trackGA4BeginCheckout(data: {
     quantity?: number;
   }>;
 }): void {
-  if (typeof window === 'undefined' || !window.gtag || !hasAnalyticsConsent()) return;
+  if (typeof window === 'undefined' || !window.gtag) return;
 
   window.gtag('event', 'begin_checkout', {
     value: data.value,
@@ -180,11 +140,22 @@ export function trackGA4AddPaymentInfo(data: {
   currency?: string;
   paymentType?: string;
 }): void {
-  if (typeof window === 'undefined' || !window.gtag || !hasAnalyticsConsent()) return;
+  if (typeof window === 'undefined' || !window.gtag) return;
 
   window.gtag('event', 'add_payment_info', {
     value: data.value,
     currency: data.currency || 'EUR',
     payment_type: data.paymentType,
   });
+}
+
+declare global {
+  interface Window {
+    gtag: (
+      command: 'event' | 'config' | 'js' | 'set',
+      targetId: string | Date,
+      config?: Record<string, unknown>
+    ) => void;
+    dataLayer: unknown[];
+  }
 }

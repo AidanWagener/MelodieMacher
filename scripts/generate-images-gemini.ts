@@ -19,9 +19,10 @@ const IMAGES_DIR = path.join(PUBLIC_DIR, 'images');
 const AVATARS_DIR = path.join(IMAGES_DIR, 'avatars');
 const OCCASIONS_DIR = path.join(IMAGES_DIR, 'occasions');
 const COVERS_DIR = path.join(IMAGES_DIR, 'covers');
+const STORIES_DIR = path.join(IMAGES_DIR, 'stories');
 
 // Ensure directories exist
-[PUBLIC_DIR, IMAGES_DIR, AVATARS_DIR, OCCASIONS_DIR, COVERS_DIR].forEach(dir => {
+[PUBLIC_DIR, IMAGES_DIR, AVATARS_DIR, OCCASIONS_DIR, COVERS_DIR, STORIES_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
     console.log(`Created directory: ${dir}`);
@@ -224,6 +225,136 @@ const imageSpecs: ImageSpec[] = [
     Must be recognizable at small sizes. Simple shapes, no complexity.
     Icon suitable for browser tab. No text. Single iconic symbol only.`,
     outputPath: path.join(IMAGES_DIR, 'favicon-source.png'),
+  },
+  // Story Images for Echte Geschichten page
+  {
+    name: 'Story - Wedding Cafe',
+    prompt: `${BRAND_STYLE}
+    Romantic illustration of a cozy German cafe scene with rain on windows.
+    Two coffee cups on a table, soft ambient lighting, intimate atmosphere.
+    Musical notes subtly floating in the steam from the coffee.
+    Deep navy blue evening tones, warm gold cafe lights, soft rose accents.
+    German aesthetic - romantic first meeting moment, premium quality.
+    Wide landscape format. No people visible, just the atmosphere.`,
+    outputPath: path.join(STORIES_DIR, 'wedding-cafe.jpg'),
+  },
+  {
+    name: 'Story - Rain Munich',
+    prompt: `${BRAND_STYLE}
+    Atmospheric illustration of rain falling in Munich city.
+    A doorway entrance providing shelter, warm golden light from inside.
+    Raindrops creating musical ripples in puddles.
+    Deep navy blue rainy sky, warm gold shelter light, soft rose umbrella.
+    German city aesthetic - romantic chance meeting moment.
+    Wide landscape format. Atmospheric and dreamy.`,
+    outputPath: path.join(STORIES_DIR, 'rain-munich.jpg'),
+  },
+  {
+    name: 'Story - Home Couple',
+    prompt: `${BRAND_STYLE}
+    Warm illustration of moving boxes in a new apartment with a view of different city skylines through windows.
+    Musical notes floating between packed and unpacked items.
+    Deep navy blue evening sky, warm gold window light, soft rose accents on personal items.
+    German aesthetic - the feeling of home being a person, not a place.
+    Wide landscape format. Cozy and transitional feeling.`,
+    outputPath: path.join(STORIES_DIR, 'home-couple.jpg'),
+  },
+  {
+    name: 'Story - Mother Daughter',
+    prompt: `${BRAND_STYLE}
+    Heartwarming illustration of a family garden in summer.
+    A garden table with lemonade, photo albums, and musical notes floating like memories.
+    Deep navy blue shadows, warm gold sunlight, soft rose flowers.
+    German aesthetic - nostalgic family moments, 60 years of memories.
+    Wide landscape format. Warm and nostalgic without being dated.`,
+    outputPath: path.join(STORIES_DIR, 'mother-daughter.jpg'),
+  },
+  {
+    name: 'Story - Friends Party',
+    prompt: `${BRAND_STYLE}
+    Fun illustration of a 30th birthday celebration.
+    Party decorations, balloons with "30", confetti with musical notes.
+    Deep navy blue evening atmosphere, warm gold party lights, soft rose decorations.
+    German aesthetic - friends celebrating milestone, fun but tasteful.
+    Wide landscape format. Energetic and celebratory.`,
+    outputPath: path.join(STORIES_DIR, 'friends-party.jpg'),
+  },
+  {
+    name: 'Story - Siblings',
+    prompt: `${BRAND_STYLE}
+    Tender illustration showing childhood memories transforming to adulthood.
+    An old t-shirt, childhood photos, and a stethoscope subtly visible.
+    Musical notes connecting past and present items.
+    Deep navy blue background, warm gold nostalgic glow, soft rose sentimental accents.
+    German aesthetic - sibling love across years.
+    Wide landscape format. Emotional and touching.`,
+    outputPath: path.join(STORIES_DIR, 'siblings.jpg'),
+  },
+  {
+    name: 'Story - Retirement',
+    prompt: `${BRAND_STYLE}
+    Dignified illustration of a corporate retirement celebration.
+    An office desk transitioning to freedom - old computer, gold watch, flowers.
+    Musical notes rising like a final accomplishment.
+    Deep navy blue professional background, warm gold achievement accents, soft rose flowers.
+    German business aesthetic - 30 years of dedication honored.
+    Wide landscape format. Professional yet emotional.`,
+    outputPath: path.join(STORIES_DIR, 'retirement.jpg'),
+  },
+  {
+    name: 'Story - Office Hero',
+    prompt: `${BRAND_STYLE}
+    Warm illustration of a beloved office coffee station.
+    A premium coffee machine, birthday calendar on wall, personalized mugs.
+    Musical steam rising from coffee cups.
+    Deep navy blue office shadows, warm gold coffee glow, soft rose personal touches.
+    German office aesthetic - the person who keeps everything running.
+    Wide landscape format. Appreciation and warmth.`,
+    outputPath: path.join(STORIES_DIR, 'office-hero.jpg'),
+  },
+  {
+    name: 'Story - Father Son',
+    prompt: `${BRAND_STYLE}
+    Emotional illustration of a father-son workshop moment.
+    Tools, a workbench, car parts, and hands working together.
+    Musical notes in the sawdust and oil.
+    Deep navy blue workshop shadows, warm gold worklight, soft rose father-son connection.
+    German aesthetic - unspoken love through shared work.
+    Wide landscape format. Tender and masculine.`,
+    outputPath: path.join(STORIES_DIR, 'father-son.jpg'),
+  },
+  {
+    name: 'Story - Grandma Kitchen',
+    prompt: `${BRAND_STYLE}
+    Nostalgic illustration of a grandmother's German kitchen.
+    Apple pie cooling, recipe book open, flour-dusted surfaces.
+    Musical notes in the steam and warmth.
+    Deep navy blue cozy shadows, warm gold oven glow, soft rose apron and curtains.
+    German aesthetic - three generations of love baked into every recipe.
+    Wide landscape format. Warm, nostalgic, homey.`,
+    outputPath: path.join(STORIES_DIR, 'grandma-kitchen.jpg'),
+  },
+  {
+    name: 'Story - Festival Friends',
+    prompt: `${BRAND_STYLE}
+    Energetic illustration of a music festival campsite at night.
+    Tents, festival wristbands, camping chairs around a small fire.
+    Musical notes rising with the campfire sparks.
+    Deep navy blue night sky, warm gold firelight, soft rose friendship glow.
+    German festival aesthetic - ten years of friendship, eight festivals.
+    Wide landscape format. Fun, adventurous, nostalgic.`,
+    outputPath: path.join(STORIES_DIR, 'festival-friends.jpg'),
+  },
+  {
+    name: 'Story - Best Friends',
+    prompt: `${BRAND_STYLE}
+    Tender illustration of lifelong best friendship.
+    Two cups of tea, old photos, comfortable couch, years of memories.
+    Musical notes connecting shared moments.
+    Deep navy blue cozy evening, warm gold lamp light, soft rose feminine touches.
+    German aesthetic - 40 years of friendship, partners in everything but romance.
+    Wide landscape format. Warm, intimate, precious.`,
+    outputPath: path.join(STORIES_DIR, 'best-friends.jpg'),
   },
 ];
 

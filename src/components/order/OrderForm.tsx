@@ -30,8 +30,8 @@ import {
   trackBumpAddition,
   trackViewContent,
 } from '@/lib/analytics';
-import { trackMetaInitiateCheckout } from '@/components/analytics/MetaPixel';
 import { trackGA4BeginCheckout, trackGA4AddPaymentInfo } from '@/components/analytics/GoogleAnalytics';
+import { trackMetaViewContent, trackMetaInitiateCheckout, trackMetaAddToCart } from '@/lib/meta-events';
 import { getUTMForStripe } from '@/lib/utm';
 
 const steps = [
@@ -67,9 +67,13 @@ export function OrderForm() {
       genre: undefined,
       mood: 3,
       packageType: orderData.packageType,
+      allowEnglish: false,
+      hasCustomLyrics: false,
+      customLyrics: '',
       bumpKaraoke: false,
       bumpRush: false,
       bumpGift: false,
+      selectedBundle: 'none',
     },
   });
 
@@ -90,6 +94,7 @@ export function OrderForm() {
   useEffect(() => {
     const pkg = packageOptions.find((p) => p.value === orderData.packageType);
     if (pkg) {
+      // GA4 tracking
       trackViewContent({
         contentId: pkg.value,
         contentName: pkg.label,
@@ -98,7 +103,15 @@ export function OrderForm() {
         currency: 'EUR',
       });
 
-      // Track InitiateCheckout on form load
+      // Meta Pixel tracking
+      trackMetaViewContent({
+        contentId: pkg.value,
+        contentName: pkg.label,
+        value: pkg.price,
+        category: 'song_package',
+      });
+
+      // Meta InitiateCheckout on form load
       trackMetaInitiateCheckout({
         value: pkg.price,
         contentIds: [pkg.value],
@@ -132,10 +145,18 @@ export function OrderForm() {
 
     const bump = bumpOptions.find((b) => b.id === bumpId.replace('bump', '').toLowerCase());
     if (bump) {
+      // GA4 tracking
       trackBumpAddition({
         bumpId: bump.id,
         bumpName: bump.label,
         price: bump.price,
+      });
+
+      // Meta Pixel tracking
+      trackMetaAddToCart({
+        contentId: bump.id,
+        contentName: bump.label,
+        value: bump.price,
       });
     }
   }, []);

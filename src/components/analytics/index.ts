@@ -1,3 +1,5 @@
-export { GoogleAnalytics, updateGoogleAnalyticsConsent } from './GoogleAnalytics';
-export { MetaPixel, updateMetaPixelConsent } from './MetaPixel';
+export { GoogleAnalytics } from './GoogleAnalytics';
+export { MetaPixel } from './MetaPixel';
+export { ConsentProvider, useConsent } from './ConsentProvider';
+export { CookieBanner } from './CookieBanner';
 export { AnalyticsProvider } from './AnalyticsProvider';

@@ -1,6 +1,5 @@
 import { Header } from '@/components/shared/Header';
 import { Footer } from '@/components/shared/Footer';
-import { CookieBanner } from '@/components/shared/CookieBanner';
 import { Hero } from '@/components/landing/Hero';
 import { SocialProof } from '@/components/landing/SocialProof';
 import { UseCases } from '@/components/landing/UseCases';
@@ -29,7 +28,6 @@ export default function HomePage() {
         <FinalCTA />
       </main>
       <Footer />
-      <CookieBanner />
     </>
   );
 }

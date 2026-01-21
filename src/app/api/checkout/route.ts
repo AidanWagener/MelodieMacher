@@ -26,6 +26,8 @@ export async function POST(request: NextRequest) {
     // Validate the order data
     const validationResult = orderSchema.safeParse(body);
     if (!validationResult.success) {
+      console.error('Validation failed:', JSON.stringify(validationResult.error.errors, null, 2));
+      console.error('Received body:', JSON.stringify(body, null, 2));
       return NextResponse.json(
         { error: 'Ungueltige Bestelldaten', details: validationResult.error.errors },
         { status: 400 }
@@ -181,13 +183,34 @@ export async function POST(request: NextRequest) {
     // Generate order ID
     const orderId = `MM-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
+    // Build URLs properly
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.melodiemacher.de';
+    const successUrl = new URL('/danke', baseUrl);
+    successUrl.searchParams.set('session_id', '{CHECKOUT_SESSION_ID}');
+    successUrl.searchParams.set('order', orderId);
+    successUrl.searchParams.set('package', orderData.packageType);
+    successUrl.searchParams.set('recipient', orderData.recipientName);
+    successUrl.searchParams.set('value', total.toString());
+
+    const cancelUrl = new URL('/bestellen', baseUrl);
+
+    // Filter out undefined/null UTM values
+    const utmMetadata: Record<string, string> = {};
+    if (body.utm && typeof body.utm === 'object') {
+      for (const [key, value] of Object.entries(body.utm)) {
+        if (value !== undefined && value !== null && value !== '') {
+          utmMetadata[key] = String(value);
+        }
+      }
+    }
+
     // Create Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card', 'paypal', 'klarna'],
+      payment_method_types: ['card', 'klarna'],
       line_items: lineItems,
       mode: 'payment',
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/danke?session_id={CHECKOUT_SESSION_ID}&order=${orderId}&package=${orderData.packageType}&recipient=${encodeURIComponent(orderData.recipientName)}&value=${total}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/bestellen`,
+      success_url: successUrl.toString(),
+      cancel_url: cancelUrl.toString(),
       customer_email: orderData.customerEmail,
       metadata: {
         orderId,
@@ -201,8 +224,7 @@ export async function POST(request: NextRequest) {
         allowEnglish: orderData.allowEnglish ? 'true' : 'false',
         hasCustomLyrics: orderData.hasCustomLyrics ? 'true' : 'false',
         selectedBundle: orderData.selectedBundle || 'none',
-        // UTM parameters for attribution
-        ...body.utm,
+        ...utmMetadata,
       },
       locale: 'de',
       billing_address_collection: 'auto',
