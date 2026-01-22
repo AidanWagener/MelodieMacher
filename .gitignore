@@ -48,3 +48,6 @@ Thumbs.db
 
 .vercel
 tmpclaude-*
+
+.env*.local
+.env.check

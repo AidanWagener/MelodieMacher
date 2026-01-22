@@ -45,11 +45,70 @@ interface Order {
   delivered_at: string;
 }
 
+const occasionLabels: Record<string, string> = {
+  hochzeit: 'Hochzeit',
+  geburtstag: 'Geburtstag',
+  jubilaeum: 'Jubilaeum',
+  firma: 'Firmenfeier',
+  taufe: 'Taufe',
+  andere: 'Besonderer Anlass',
+};
+
 export async function generateMetadata({ params }: { params: { orderNumber: string } }): Promise<Metadata> {
-  return {
-    title: `Dein Song ist fertig! | MelodieMacher`,
-    description: 'Lade deinen personalisierten Song herunter.',
-  };
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.melodiemacher.de';
+
+  try {
+    const supabase = getSupabaseAdmin();
+
+    const { data: order } = await supabase
+      .from('orders')
+      .select('order_number, recipient_name, occasion')
+      .eq('order_number', params.orderNumber)
+      .eq('status', 'delivered')
+      .single();
+
+    if (!order) {
+      return {
+        title: 'Song nicht gefunden | MelodieMacher',
+        description: 'Dieser Song konnte nicht gefunden werden.',
+      };
+    }
+
+    const occasionText = occasionLabels[order.occasion] || order.occasion;
+    const title = `Song fuer ${order.recipient_name} | MelodieMacher`;
+    const description = `Ein einzigartiger Song zum ${occasionText} - erstellt mit Liebe von MelodieMacher`;
+    const ogImageUrl = `${appUrl}/api/og/${params.orderNumber}`;
+
+    return {
+      title,
+      description,
+      openGraph: {
+        title: `🎵 Song fuer ${order.recipient_name}`,
+        description,
+        images: [
+          {
+            url: ogImageUrl,
+            width: 1200,
+            height: 630,
+            alt: `Song fuer ${order.recipient_name}`,
+          },
+        ],
+        type: 'music.song',
+        siteName: 'MelodieMacher',
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: `🎵 Song fuer ${order.recipient_name}`,
+        description,
+        images: [ogImageUrl],
+      },
+    };
+  } catch {
+    return {
+      title: 'Dein Song ist fertig! | MelodieMacher',
+      description: 'Lade deinen personalisierten Song herunter.',
+    };
+  }
 }
 
 async function getOrderData(orderNumber: string): Promise<{ order: Order | null; deliverables: Deliverable[] }> {
@@ -95,15 +154,6 @@ const deliverableConfig: Record<string, { label: string; icon: typeof FileAudio;
   pdf: { label: 'Songtext PDF', icon: FileText, color: 'bg-blue-100 text-blue-700' },
   png: { label: 'Album Cover', icon: ImageIcon, color: 'bg-pink-100 text-pink-700' },
   wav: { label: 'Instrumental', icon: Mic, color: 'bg-orange-100 text-orange-700' },
-};
-
-const occasionLabels: Record<string, string> = {
-  hochzeit: 'Hochzeit',
-  geburtstag: 'Geburtstag',
-  jubilaeum: 'Jubilaeum',
-  firma: 'Firmenfeier',
-  taufe: 'Taufe',
-  andere: 'Besonderer Anlass',
 };
 
 export default async function DownloadPage({ params }: { params: { orderNumber: string } }) {

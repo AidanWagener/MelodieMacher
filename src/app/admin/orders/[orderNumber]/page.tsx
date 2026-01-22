@@ -32,7 +32,15 @@ import {
   FileAudio,
   Globe,
   X,
-  Info
+  Info,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  Play,
+  Rocket,
+  Circle,
+  XCircle,
+  SkipForward
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -308,6 +316,22 @@ export default function OrderDetailPage() {
   });
   const [deliverConfirm, setDeliverConfirm] = useState(false);
 
+  // AI Prompt Generator state
+  const [generatingPrompt, setGeneratingPrompt] = useState(false);
+  const [generatedPrompt, setGeneratedPrompt] = useState<{
+    sunoPrompt: string;
+    suggestedTags: string[];
+    moodDescription: string;
+    lyricsOutline: { verse1: string; chorus: string; verse2: string; bridge: string } | null;
+  } | null>(null);
+  const [promptExpanded, setPromptExpanded] = useState(true);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
+
+  // Pipeline state
+  const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [pipelineSteps, setPipelineSteps] = useState<import('@/types/admin').PipelineStep[]>([]);
+  const [pipelineExpanded, setPipelineExpanded] = useState(true);
+
   const fetchOrder = useCallback(async () => {
     try {
       const response = await fetch(`/api/admin/orders/${orderNumber}`);
@@ -381,6 +405,140 @@ ${order.custom_lyrics}` : ''}`;
     setCopiedStory(true);
     addToast('Geschichte fuer Suno kopiert', 'success');
     setTimeout(() => setCopiedStory(false), 2000);
+  };
+
+  const generateSunoPrompt = async () => {
+    if (!order) return;
+    setGeneratingPrompt(true);
+
+    try {
+      const response = await fetch('/api/admin/generate/prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setGeneratedPrompt({
+          sunoPrompt: data.sunoPrompt,
+          suggestedTags: data.suggestedTags || [],
+          moodDescription: data.moodDescription || '',
+          lyricsOutline: data.lyricsOutline || null,
+        });
+        addToast('Suno Prompt erfolgreich generiert', 'success');
+      } else {
+        addToast(data.error || 'Prompt-Generierung fehlgeschlagen', 'error');
+      }
+    } catch (error) {
+      console.error('Prompt generation failed:', error);
+      addToast('Prompt-Generierung fehlgeschlagen', 'error');
+    } finally {
+      setGeneratingPrompt(false);
+    }
+  };
+
+  const copySunoPrompt = async () => {
+    if (!generatedPrompt) return;
+
+    const fullPrompt = `${generatedPrompt.sunoPrompt}
+
+Tags: ${generatedPrompt.suggestedTags.join(', ')}`;
+
+    await navigator.clipboard.writeText(fullPrompt);
+    setCopiedPrompt(true);
+    addToast('Prompt in Zwischenablage kopiert', 'success');
+    setTimeout(() => setCopiedPrompt(false), 2000);
+  };
+
+  // One-Click Pipeline
+  const runPipeline = async () => {
+    if (!order) return;
+    setPipelineRunning(true);
+    setPipelineSteps([
+      { name: 'priority_analysis', status: 'pending' },
+      { name: 'suno_prompt', status: 'pending' },
+      { name: 'album_cover', status: 'pending' },
+      { name: 'set_in_production', status: 'pending' },
+      { name: 'check_delivery', status: 'pending' },
+    ]);
+
+    try {
+      const response = await fetch('/api/admin/pipeline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+
+      const data = await response.json();
+
+      if (data.steps) {
+        setPipelineSteps(data.steps);
+
+        // Update prompt if generated
+        const promptStep = data.steps.find((s: import('@/types/admin').PipelineStep) => s.name === 'suno_prompt');
+        if (promptStep?.status === 'completed' && promptStep.result) {
+          const result = promptStep.result as { sunoPrompt: string; suggestedTags?: string[]; moodDescription?: string };
+          setGeneratedPrompt({
+            sunoPrompt: result.sunoPrompt || '',
+            suggestedTags: result.suggestedTags || [],
+            moodDescription: result.moodDescription || '',
+            lyricsOutline: null,
+          });
+        }
+
+        // Show summary
+        const completed = data.steps.filter((s: import('@/types/admin').PipelineStep) => s.status === 'completed').length;
+        const failed = data.steps.filter((s: import('@/types/admin').PipelineStep) => s.status === 'failed').length;
+
+        if (failed > 0) {
+          addToast(`Pipeline: ${completed} erfolgreich, ${failed} fehlgeschlagen`, 'warning');
+        } else {
+          addToast(`Pipeline abgeschlossen: ${completed} Schritte`, 'success');
+        }
+
+        // Refresh order data
+        fetchOrder();
+      }
+    } catch (error) {
+      console.error('Pipeline failed:', error);
+      addToast('Pipeline fehlgeschlagen', 'error');
+    } finally {
+      setPipelineRunning(false);
+    }
+  };
+
+  const pipelineDeliver = async () => {
+    if (!order) return;
+    setPipelineRunning(true);
+
+    try {
+      const response = await fetch('/api/admin/pipeline', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setOrder({
+          ...order,
+          status: 'delivered',
+          delivery_url: data.deliveryUrl,
+          delivered_at: new Date().toISOString()
+        });
+        addToast(`Song erfolgreich an ${order.customer_email} geliefert!`, 'success');
+      } else {
+        addToast(data.error || 'Lieferung fehlgeschlagen', 'error');
+      }
+    } catch (error) {
+      console.error('Pipeline delivery failed:', error);
+      addToast('Lieferung fehlgeschlagen', 'error');
+    } finally {
+      setPipelineRunning(false);
+    }
   };
 
   const handleFileUpload = async (type: string, file: File) => {
@@ -695,6 +853,133 @@ ${order.custom_lyrics}` : ''}`;
         </Card>
       )}
 
+      {/* One-Click Pipeline Control */}
+      {order.status !== 'delivered' && order.status !== 'refunded' && (
+        <Card className="border-2 border-purple-200 bg-gradient-to-r from-purple-50 via-pink-50 to-orange-50">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Rocket className="w-5 h-5 text-purple-600" />
+                One-Click Pipeline
+              </CardTitle>
+              <button
+                onClick={() => setPipelineExpanded(!pipelineExpanded)}
+                className="p-1 hover:bg-purple-100 rounded"
+              >
+                {pipelineExpanded ? (
+                  <ChevronUp className="w-5 h-5 text-gray-500" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-gray-500" />
+                )}
+              </button>
+            </div>
+            <p className="text-sm text-gray-600">
+              Automatisiere alle Produktionsschritte mit einem Klick
+            </p>
+          </CardHeader>
+          {pipelineExpanded && (
+            <CardContent className="space-y-4">
+              {/* Pipeline Steps Visualization */}
+              {pipelineSteps.length > 0 && (
+                <div className="bg-white rounded-lg border border-purple-100 p-4">
+                  <div className="space-y-2">
+                    {pipelineSteps.map((step, index) => {
+                      const stepLabels: Record<string, string> = {
+                        priority_analysis: 'Prioritaet analysieren',
+                        suno_prompt: 'Suno Prompt generieren',
+                        album_cover: 'Album Cover vorbereiten',
+                        set_in_production: 'In Produktion setzen',
+                        check_delivery: 'Lieferbereitschaft pruefen',
+                      };
+
+                      const statusIcons: Record<string, React.ReactNode> = {
+                        pending: <Circle className="w-4 h-4 text-gray-300" />,
+                        running: <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />,
+                        completed: <CheckCircle className="w-4 h-4 text-green-500" />,
+                        failed: <XCircle className="w-4 h-4 text-red-500" />,
+                        skipped: <SkipForward className="w-4 h-4 text-gray-400" />,
+                      };
+
+                      return (
+                        <div key={step.name} className="flex items-center gap-3">
+                          {statusIcons[step.status]}
+                          <span className={cn(
+                            "text-sm",
+                            step.status === 'completed' && "text-green-700",
+                            step.status === 'failed' && "text-red-600",
+                            step.status === 'running' && "text-purple-700 font-medium",
+                            step.status === 'skipped' && "text-gray-400",
+                            step.status === 'pending' && "text-gray-500"
+                          )}>
+                            {stepLabels[step.name] || step.name}
+                          </span>
+                          {step.error && (
+                            <span className="text-xs text-red-500">({step.error})</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  onClick={runPipeline}
+                  disabled={pipelineRunning}
+                  className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                >
+                  {pipelineRunning ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Pipeline laeuft...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 mr-2" />
+                      Pipeline starten
+                    </>
+                  )}
+                </Button>
+
+                {canDeliver && (
+                  <Button
+                    onClick={pipelineDeliver}
+                    disabled={pipelineRunning}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    {pipelineRunning ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Liefere...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Jetzt liefern
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+
+              {/* Pipeline Info */}
+              <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
+                <strong>Pipeline Schritte:</strong>
+                <ol className="mt-1 ml-4 list-decimal">
+                  <li>Prioritaet analysieren (KI)</li>
+                  <li>Suno Prompt generieren (KI)</li>
+                  <li>Album Cover Prompt vorbereiten</li>
+                  <li>Status auf "In Produktion" setzen</li>
+                  <li>Lieferbereitschaft pruefen</li>
+                </ol>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left Column - Order Details */}
         <div className="lg:col-span-2 space-y-6">
@@ -781,6 +1066,160 @@ ${order.custom_lyrics}` : ''}`;
                 </div>
               </div>
             </CardContent>
+          </Card>
+
+          {/* AI Prompt Generator */}
+          <Card className="border-2 border-primary-200 bg-gradient-to-br from-primary-50 to-white">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary-600" />
+                  KI Prompt Generator
+                </CardTitle>
+                <button
+                  onClick={() => setPromptExpanded(!promptExpanded)}
+                  className="p-1 hover:bg-primary-100 rounded"
+                >
+                  {promptExpanded ? (
+                    <ChevronUp className="w-5 h-5 text-gray-500" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-gray-500" />
+                  )}
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Generiere automatisch einen optimierten Suno-Prompt aus der Kundengeschichte
+              </p>
+            </CardHeader>
+            {promptExpanded && (
+              <CardContent className="space-y-4">
+                {!generatedPrompt ? (
+                  <Button
+                    onClick={generateSunoPrompt}
+                    disabled={generatingPrompt}
+                    className="w-full bg-primary-600 hover:bg-primary-700"
+                  >
+                    {generatingPrompt ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generiere Prompt...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-4 h-4 mr-2" />
+                        Suno Prompt generieren
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Main Prompt */}
+                    <div className="bg-white border border-primary-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-semibold text-primary-600 uppercase tracking-wide">
+                          Suno Prompt
+                        </label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={copySunoPrompt}
+                          className="h-8"
+                        >
+                          {copiedPrompt ? (
+                            <>
+                              <Check className="w-4 h-4 mr-1 text-green-600" />
+                              Kopiert!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4 mr-1" />
+                              Kopieren
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                        {generatedPrompt.sunoPrompt}
+                      </p>
+                    </div>
+
+                    {/* Tags */}
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
+                        Vorgeschlagene Tags
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {generatedPrompt.suggestedTags.map((tag, index) => (
+                          <span
+                            key={index}
+                            className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-medium"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Mood */}
+                    {generatedPrompt.moodDescription && (
+                      <div>
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">
+                          Stimmung
+                        </label>
+                        <p className="text-sm text-gray-700">{generatedPrompt.moodDescription}</p>
+                      </div>
+                    )}
+
+                    {/* Lyrics Outline */}
+                    {generatedPrompt.lyricsOutline && (
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 block">
+                          Lyrics-Struktur
+                        </label>
+                        <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="font-medium text-gray-700">Vers 1:</span>
+                            <p className="text-gray-600">{generatedPrompt.lyricsOutline.verse1}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-700">Refrain:</span>
+                            <p className="text-gray-600">{generatedPrompt.lyricsOutline.chorus}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-700">Vers 2:</span>
+                            <p className="text-gray-600">{generatedPrompt.lyricsOutline.verse2}</p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-700">Bridge:</span>
+                            <p className="text-gray-600">{generatedPrompt.lyricsOutline.bridge}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Regenerate Button */}
+                    <Button
+                      variant="outline"
+                      onClick={generateSunoPrompt}
+                      disabled={generatingPrompt}
+                      className="w-full"
+                    >
+                      {generatingPrompt ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Generiere neu...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Neu generieren
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            )}
           </Card>
 
           {/* Story */}

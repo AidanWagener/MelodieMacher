@@ -6,12 +6,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   Music,
   Package,
-  Settings,
   LogOut,
   Menu,
   X,
-  BarChart3,
-  Users,
   Lock,
   CheckCircle,
   AlertCircle,
@@ -139,12 +136,9 @@ export function ConfirmDialog({
   );
 }
 
-// Navigation
+// Navigation - only include pages that exist
 const navigation = [
   { name: 'Bestellungen', href: '/admin', icon: Package },
-  { name: 'Statistiken', href: '/admin/stats', icon: BarChart3 },
-  { name: 'Kunden', href: '/admin/customers', icon: Users },
-  { name: 'Einstellungen', href: '/admin/settings', icon: Settings },
 ];
 
 function LoginForm({ onLogin, isLoading }: { onLogin: (password: string) => Promise<void>; isLoading: boolean }) {
