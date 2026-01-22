@@ -1,30 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { isAuthenticated, unauthorizedResponse } from '@/lib/admin-auth';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { OCCASION_LABELS } from '@/lib/constants';
+import { parseAIJsonResponse, escapeHtml } from '@/lib/ai-utils';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Resend } from 'resend';
-
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !key) {
-    throw new Error('Supabase not configured');
-  }
-
-  return createClient(url, key, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
-
-const occasionLabels: Record<string, string> = {
-  hochzeit: 'Hochzeit',
-  geburtstag: 'Geburtstag',
-  jubilaeum: 'Jubilaeum',
-  firma: 'Firmenfeier',
-  taufe: 'Taufe',
-  andere: 'Besonderer Anlass',
-};
 
 interface PipelineStep {
   name: string;
@@ -85,7 +65,7 @@ export async function POST(request: NextRequest) {
             const model = genai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
             const orderAge = Math.floor((Date.now() - new Date(order.created_at).getTime()) / (1000 * 60 * 60));
-            const prompt = `Analysiere Dringlichkeit. Anlass: ${occasionLabels[order.occasion] || order.occasion}. Geschichte: ${order.story}. Alter: ${orderAge}h. Antworte mit JSON: {"priority":"urgent|high|normal|low","reasons":["..."],"suggestedDeadline":"ISO oder null"}`;
+            const prompt = `Analysiere Dringlichkeit. Anlass: ${OCCASION_LABELS[order.occasion] || order.occasion}. Geschichte: ${order.story}. Alter: ${orderAge}h. Antworte mit JSON: {"priority":"urgent|high|normal|low","reasons":["..."],"suggestedDeadline":"ISO oder null"}`;
 
             const result = await model.generateContent(prompt);
             const text = result.response.text();
@@ -130,7 +110,7 @@ export async function POST(request: NextRequest) {
           const model = genai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
           const prompt = `Erstelle einen Suno AI Musik-Prompt fuer:
-Anlass: ${occasionLabels[order.occasion] || order.occasion}
+Anlass: ${OCCASION_LABELS[order.occasion] || order.occasion}
 Empfaenger: ${order.recipient_name}
 Genre: ${order.genre}
 Geschichte: ${order.story}
@@ -186,7 +166,7 @@ Antworte mit JSON:
 
             // Generate cover prompt
             const prompt = `Erstelle eine Bildbeschreibung fuer ein Albumcover:
-Anlass: ${occasionLabels[order.occasion] || order.occasion}
+Anlass: ${OCCASION_LABELS[order.occasion] || order.occasion}
 Fuer: ${order.recipient_name}
 Genre: ${order.genre}
 
@@ -356,22 +336,26 @@ export async function PUT(request: NextRequest) {
     const resendKey = process.env.RESEND_API_KEY;
     if (resendKey) {
       const resend = new Resend(resendKey);
+      // Escape user content to prevent XSS
+      const safeCustomerName = escapeHtml(order.customer_name || '');
+      const safeRecipientName = escapeHtml(order.recipient_name || '');
+
       await resend.emails.send({
         from: 'MelodieMacher <hallo@melodiemacher.de>',
         to: order.customer_email,
-        subject: `Dein Song fuer ${order.recipient_name} ist fertig!`,
+        subject: `Dein Song für ${safeRecipientName} ist fertig!`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h1 style="color: #1e3a5f;">Dein Song ist fertig!</h1>
-            <p>Hallo ${order.customer_name},</p>
-            <p>Grossartige Neuigkeiten! Dein personalisierter Song fuer <strong>${order.recipient_name}</strong> ist bereit.</p>
+            <p>Hallo ${safeCustomerName},</p>
+            <p>Großartige Neuigkeiten! Dein personalisierter Song für <strong>${safeRecipientName}</strong> ist bereit.</p>
             <p style="margin: 30px 0;">
               <a href="${deliveryUrl}" style="background-color: #1e3a5f; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
-                Song jetzt anhoeren & herunterladen
+                Song jetzt anhören & herunterladen
               </a>
             </p>
             <p>Wir hoffen, dass dieser Song viel Freude bereitet!</p>
-            <p>Mit musikalischen Gruessen,<br>Dein MelodieMacher Team</p>
+            <p>Mit musikalischen Grüßen,<br>Dein MelodieMacher Team</p>
           </div>
         `
       });
